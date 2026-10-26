@@ -41,6 +41,14 @@ PDF_PAGE_SOURCE_NAME = "pdf-page"
 
 _TOKEN_PATTERN = re.compile(r"[a-z]+|\d+")
 
+# Retrieval tuning: broadened FTS pool size, heading boost, prefix fallback.
+_EXPANSION_SINGLE_QUERIES = 14
+_EXPANSION_PAIR_QUERIES = 10
+_TITLE_TOKEN_COUNT = 16
+_TITLE_BOOST = 3.0
+_PREFIX_LENGTH = 5
+_PREFIX_WEIGHT = 0.7
+
 # Function words excluded from retrieval scoring so the evidence terms in a
 # FinanceBench question dominate the page ranking.
 _STOPWORDS = frozenset(
@@ -70,8 +78,8 @@ class PDFPageInput(BaseModel):
 
 
 def _validate_document_id(document_id: str) -> None:
-    if not isinstance(document_id, str) or not document_id.strip() or document_id != document_id.strip():
-        raise ValueError("document_id must be non-empty without surrounding whitespace")  # noqa: TRY003
+    if not isinstance(document_id, str) or not document_id.strip():
+        raise ValueError("document_id must not be empty or whitespace only")  # noqa: TRY003
 
 
 def pdf_page_source_id(document_id: str, document_sha256: str, page_number: int) -> str:
@@ -183,16 +191,89 @@ def _question_terms(question: str) -> tuple[str, ...]:
     return tuple(term for term in _TOKEN_PATTERN.findall(normalized) if term not in _STOPWORDS)
 
 
-def _page_terms(text: str) -> Counter[str]:
-    normalized = unicodedata.normalize("NFC", text).casefold()
-    return Counter(_TOKEN_PATTERN.findall(normalized))
+def _expansion_queries(terms: tuple[str, ...]) -> tuple[str, ...]:
+    """Short FTS queries that widen the candidate pool beyond the full question.
+
+    Memory's FTS admission requires a page to cover a quarter of the query
+    terms, so a long natural-language question admits only a handful of pages
+    and can miss the evidence page entirely. Single-term and adjacent-pair
+    queries have a one-term floor and recover those pages.
+    """
+
+    uniq = list(dict.fromkeys(terms))
+    singles = sorted((term for term in uniq if len(term) >= 4), key=lambda term: (-len(term), term))
+    pairs: list[tuple[int, str]] = []
+    for left, right in zip(uniq, uniq[1:]):
+        if len(left) >= 4 and len(right) >= 4:
+            pairs.append((len(left) + len(right), f"{left} {right}"))
+    pairs.sort(key=lambda item: (-item[0], item[1]))
+    return tuple(singles[:_EXPANSION_SINGLE_QUERIES]) + tuple(text for _, text in pairs[:_EXPANSION_PAIR_QUERIES])
+
+
+def _title_tokens(tokens: list[str]) -> set[str]:
+    head = tokens[:_TITLE_TOKEN_COUNT]
+    if head[:3] == ["table", "of", "contents"]:
+        head = head[3:]
+    return set(head)
+
+
+def _pool_idf(total: int, frequency: int) -> float:
+    return math.log(1.0 + (total - frequency + 0.5) / (frequency + 0.5))
+
+
+def _lexical_scores(texts: list[str], query_terms: tuple[str, ...]) -> list[float]:
+    """Score pool pages by distinct query-term coverage weighted by pool IDF.
+
+    Term frequency is deliberately ignored: report boilerplate repeats the
+    company name and years on every page, and repeated tokens would inflate
+    generic pages above the ones that actually carry the evidence terms. Terms
+    missing from the whole pool fall back to a shared-prefix match (plural and
+    derived forms such as "geographies" versus "geographic"), and a term found
+    in the page's leading heading tokens counts tripled because evidence pages
+    are usually section or statement starts.
+    """
+
+    total = len(texts)
+    term_sets: list[set[str]] = []
+    prefix_sets: list[set[str]] = []
+    titles: list[set[str]] = []
+    term_df: Counter[str] = Counter()
+    prefix_df: Counter[str] = Counter()
+    for text in texts:
+        tokens = _TOKEN_PATTERN.findall(unicodedata.normalize("NFC", text).casefold())
+        terms = set(tokens)
+        prefixes = {token[:_PREFIX_LENGTH] for token in tokens if len(token) >= _PREFIX_LENGTH}
+        term_sets.append(terms)
+        prefix_sets.append(prefixes)
+        titles.append(_title_tokens(tokens))
+        term_df.update(terms)
+        prefix_df.update(prefixes)
+
+    scores: list[float] = []
+    for index in range(total):
+        score = 0.0
+        for term in dict.fromkeys(query_terms):
+            frequency = term_df.get(term, 0)
+            weight = 1.0
+            if term not in term_sets[index]:
+                prefix = term[:_PREFIX_LENGTH]
+                if frequency != 0 or len(term) < _PREFIX_LENGTH or prefix not in prefix_sets[index]:
+                    continue
+                frequency = prefix_df.get(prefix, 0)
+                weight = _PREFIX_WEIGHT
+            value = _pool_idf(total, frequency) * weight
+            if term in titles[index]:
+                value *= _TITLE_BOOST
+            score += value
+        scores.append(score)
+    return scores
 
 
 async def search_pdf_pages(memory, question: str, limit: int = 10):
     """Search scoped Memory for pages evidencing one FinanceBench question.
 
     Uses the public FTS Memory API for an offline broad candidate pool, then
-    re-ranks candidates with a lexical BM25-style score over question terms and
+    re-ranks candidates with a lexical IDF score over question terms and
     returns at most ``limit`` distinct exact page citations.
     """
     from powercontext.artifacts import MemoryCitation
@@ -202,50 +283,24 @@ async def search_pdf_pages(memory, question: str, limit: int = 10):
         return ()
     query_terms = _question_terms(question)
     pool_size = max(limit * 10, 100)
-    page = await memory.search(SearchMemoryRequest(query=question, mode="fts", limit=pool_size))
-    hits = page.hits
+    hits: list = []
+    seen: set[str] = set()
+    for query in (question, *_expansion_queries(query_terms)):
+        page = await memory.search(SearchMemoryRequest(query=query, mode="fts", limit=pool_size))
+        for hit in page.hits:
+            if hit.entry_id not in seen:
+                seen.add(hit.entry_id)
+                hits.append(hit)
     if not hits:
         return ()
 
-    if query_terms:
-        texts = [hit.text for hit in hits]
-        term_counts = [_page_terms(text) for text in texts]
-        num_docs = len(texts)
-        average_length = sum(len(counts) for counts in term_counts) / num_docs if num_docs else 0.0
-        document_frequency: dict[str, int] = {}
-        for counts in term_counts:
-            for term in counts:
-                document_frequency[term] = document_frequency.get(term, 0) + 1
-
-        def score(index: int) -> float:
-            counts = term_counts[index]
-            length = len(counts)
-            total = 0.0
-            for term in query_terms:
-                df = document_frequency.get(term, 0)
-                if df == 0:
-                    continue
-                term_frequency = counts.get(term, 0)
-                if term_frequency == 0:
-                    continue
-                idf = math.log(1.0 + (num_docs - df + 0.5) / (df + 0.5))
-                k1 = 1.5
-                b = 0.75
-                denominator = term_frequency + k1 * (1.0 - b + b * length / average_length)
-                total += idf * term_frequency * (k1 + 1.0) / denominator
-            return total
-
-        ranked = sorted(range(len(hits)), key=score, reverse=True)
-    else:
-        ranked = list(range(len(hits)))
+    texts = [hit.text for hit in hits]
+    scores = _lexical_scores(texts, query_terms) if query_terms else [0.0] * len(hits)
 
     citations: list[MemoryCitation] = []
-    seen: set[str] = set()
+    ranked = sorted(range(len(hits)), key=lambda index: -scores[index])
     for index in ranked:
         hit = hits[index]
-        if hit.entry_id in seen:
-            continue
-        seen.add(hit.entry_id)
         citations.append(
             MemoryCitation(
                 memory_ref=hit.memory_ref,
