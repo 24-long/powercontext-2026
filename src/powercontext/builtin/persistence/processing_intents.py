@@ -209,6 +209,34 @@ class ArtifactProcessingIntentRepository:
             or 0
         )
 
+    async def admit_pending(
+        self,
+        connection: AsyncConnection,
+        scope_id: str,
+        binding_name: str,
+        /,
+    ) -> StoredArtifactProcessingIntent:
+        """Accept one invocation for a member with unacknowledged dirty work.
+
+        Unlike :meth:`admit`, this does not require a frozen automatic scan; the
+        caller has already validated its fence and the member's eligibility
+        (ready/running/retry exclusion plus any trigger predicate).
+        """
+
+        current = await self.load(connection, scope_id, binding_name, for_update=True)
+        if current is None:
+            raise InvalidRepositoryArgumentError("scope_id", "automatic member is not registered")
+        requested = current.requested_generation
+        if current.dirty_generation > current.clean_generation and requested == current.handled_generation:
+            requested += 1
+        table = ARTIFACT_PROCESSING_INTENTS_TABLE
+        await connection.execute(
+            update(table)
+            .where(table.c.scope_id == scope_id, table.c.binding_name == binding_name)
+            .values(requested_generation=requested)
+        )
+        return cast(StoredArtifactProcessingIntent, await self.load(connection, scope_id, binding_name))
+
     async def admit(
         self,
         connection: AsyncConnection,
