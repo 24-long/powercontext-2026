@@ -47,9 +47,9 @@ else:
     from multiprocessing.popen_spawn_posix import Popen as SpawnPopen
 
 from powercontext._logging import log_safely
+from powercontext.builtin.persistence.cursors import SourceCursorRepository
 from powercontext.builtin.persistence.database import AsyncDatabase
 from powercontext.builtin.persistence.errors import ArtifactProcessingLeadershipLostError
-from powercontext.builtin.persistence.cursors import SourceCursorRepository
 from powercontext.builtin.persistence.processing_intents import ArtifactProcessingIntentRepository
 from powercontext.builtin.persistence.supervision import (
     ArtifactProcessingBindingStateRepository,
@@ -105,6 +105,11 @@ class ArtifactProcessingPendingProvider(Protocol):
         ...
 
 
+def _require_positive_integer(value: object, name: str) -> None:
+    if type(value) is not int or value < 1:
+        raise ValueError(f"{name} must be a positive integer")  # noqa: TRY003
+
+
 @dataclass(frozen=True, slots=True)
 class ArtifactProcessingBinding:
     """Startup registration of one Family and its independently budgeted Worker."""
@@ -135,14 +140,11 @@ class ArtifactProcessingBinding:
         if re.fullmatch(r"[A-Z][A-Z0-9_]*", prefix) is None:
             raise ValueError("config_prefix must be an uppercase configuration prefix")  # noqa: TRY003
         object.__setattr__(self, "config_prefix", prefix)
-        if type(self.max_workers) is not int or self.max_workers < 1:
-            raise ValueError("max_workers must be a positive integer")  # noqa: TRY003
+        _require_positive_integer(self.max_workers, "max_workers")
         if self.worker_timeout_seconds <= 0:
             raise ValueError("worker_timeout_seconds must be positive")  # noqa: TRY003
-        if self.automatic_count_threshold is not None and (
-            type(self.automatic_count_threshold) is not int or self.automatic_count_threshold < 1
-        ):
-            raise ValueError("automatic_count_threshold must be a positive integer")  # noqa: TRY003
+        if self.automatic_count_threshold is not None:
+            _require_positive_integer(self.automatic_count_threshold, "automatic_count_threshold")
         if self.automatic_processing_interval is not None:
             if self.automatic_processing_interval.total_seconds() <= 0:
                 raise ValueError("automatic interval must be positive")  # noqa: TRY003
