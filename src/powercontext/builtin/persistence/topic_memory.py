@@ -379,6 +379,7 @@ class TopicMemoryRepository:
             .where(
                 TOPIC_MEMORY_ACTIVE_TOPICS_TABLE.c.scope_id == scope_id,
                 TOPIC_MEMORY_ACTIVE_TOPICS_TABLE.c.family == TopicMemory.family,
+                ARTIFACT_HEADS_TABLE.c.lifecycle_state == "active",
             )
         )
         if tag_filter is not None:
@@ -477,16 +478,37 @@ class TopicMemoryRepository:
         query_terms = tuple(sorted(set(analyzed.split())))
         if not analyzed and used_mode == "fts":
             return TopicMemorySearchResult(mode=used_mode, hits=())
+        unavailable = set(
+            (
+                await connection.execute(
+                    select(ARTIFACT_HEADS_TABLE.c.artifact_id).where(
+                        ARTIFACT_HEADS_TABLE.c.scope_id == scope_id,
+                        ARTIFACT_HEADS_TABLE.c.family == TopicMemory.family,
+                        ARTIFACT_HEADS_TABLE.c.lifecycle_state != "active",
+                    )
+                )
+            ).scalars()
+        )
         request = TopicMemorySearchRequest(
             query=query,
             analyzed_query=" ".join(query_terms),
-            candidate_limit=min(MAX_TOPIC_MEMORY_CHANNEL_CANDIDATES, max(limit * 4, 32)),
+            # Ineligible topics must not displace supported candidates in bounded dependency scopes.
+            candidate_limit=min(MAX_TOPIC_MEMORY_CHANNEL_CANDIDATES, max(limit * 4, 32) + len(unavailable)),
             mode=used_mode,
             query_vector=query_vector,
             embedding_profile=embedding_profile,
             admission=admission,
         )
         channels = await self.index.search(connection, scope_id, request)
+        if unavailable:
+            channels = channels.model_copy(
+                update={
+                    name: tuple(
+                        hit for hit in getattr(channels, name) if hit.artifact_ref.artifact_id not in unavailable
+                    )
+                    for name in ("topic_fts", "detail_fts", "topic_vector", "detail_vector")
+                }
+            )
         await self._check_retrieval_shape(connection)
         outcome = _fuse_topic_memory_rankings(query, channels, limit, mode=used_mode, admission=admission)
         return TopicMemorySearchResult(
