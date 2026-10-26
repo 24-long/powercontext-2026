@@ -34,6 +34,11 @@ from powercontext.builtin.runtime.prepared_code import (
     PreparedCodeCandidate,
     assemble_code,
 )
+from powercontext.builtin.runtime.prepared_evidence import (
+    EvidenceFragment,
+    MemoryEntryAddress,
+    select_evidence,
+)
 from powercontext.builtin.runtime.prepared_text import (
     TRUST_POLICY,
     ContextTextItem,
@@ -106,15 +111,7 @@ class PreparedContextBuild:
     origins: tuple[PreparedContextOrigin, ...]
     omissions: PreparedContextOmissions = PreparedContextOmissions()
     code_origins: tuple[CodeEvidenceRef, ...] = ()
-
-
-@dataclass(frozen=True)
-class MemoryEntryAddress:
-    """Identify one exact Memory entry version across Scope boundaries."""
-
-    memory: ArtifactAddress
-    entry_id: str
-    entry_version_id: str
+    fragments: tuple[EvidenceFragment, ...] = ()
 
 
 PreparedContextOrigin = MemoryCitation | ArtifactRef | MemoryEntryAddress | ArtifactAddress
@@ -211,6 +208,30 @@ class PreparedContextBuilder:
         profile_candidates: Sequence[PreparedProfileCandidate] = (),
         code_candidates: Sequence[PreparedCodeCandidate] = (),
     ) -> PreparedContextBuild:
+        if request.evidence_selection:
+            selection = select_evidence(
+                query=request.query,
+                max_bytes=request.max_bytes,
+                current_scope_id=current_scope_id,
+                memory_candidates=memory_candidates,
+            )
+            if selection.content is None:
+                return PreparedContextBuild(
+                    context=self.empty(),
+                    origins=(),
+                    omissions=PreparedContextOmissions(),
+                    fragments=(),
+                )
+            return PreparedContextBuild(
+                context=PreparedContext(
+                    status="ready",
+                    content=selection.content,
+                    content_bytes=len(selection.content.encode("utf-8")),
+                ),
+                origins=selection.origins,
+                omissions=PreparedContextOmissions(),
+                fragments=selection.fragments,
+            )
         if request.include_code:
 
             def historical(history_request: PrepareContextRequest, entries: int) -> PreparedContextBuild:
