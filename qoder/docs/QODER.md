@@ -4,7 +4,7 @@
 - 开发工具：Qoder Desktop
 - 开发日期：2026-10-26
 - 代码仓库：https://github.com/24-long/powercontext-2026/tree/2026-competition-ecosystem/qoder
-- 分支与提交：`2026-competition-ecosystem` @ `a2eb5902e93f1f2b7c29138891ea2f690224f324`
+- 分支与提交：`2026-competition-ecosystem`（提测时填写该分支最新 commit hash）
 - 项目网站：https://litseek-research-p9tfgvczz96.qoder.zone
 - Qoder 账号 UID：**请参赛者在提测前填写**
 

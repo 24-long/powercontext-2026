@@ -166,7 +166,7 @@ python backend/scripts/smoke.py
 项目网站：https://litseek-research-p9tfgvczz96.qoder.zone （已设置任何人都可访问）。
 
 代码仓库：https://github.com/24-long/powercontext-2026/tree/2026-competition-ecosystem/qoder
-（分支 `2026-competition-ecosystem`，提测 commit `a2eb5902e93f1f2b7c29138891ea2f690224f324`。仓库需对评审开放访问权限。）
+（分支 `2026-competition-ecosystem`，提测时填写该分支的最新 commit hash。仓库需对评审开放访问权限。）
 
 Qoder Sites 托管静态项目网站。由于嵌入式 seekdb 需要 Python 和持久化本地数据目录，线上静态站点默认使用**明确标注的内置样例**，不把它冒充实时检索。评审按上述步骤即可在本地体验真实 seekdb 核心链路。
 
