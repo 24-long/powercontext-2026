@@ -185,8 +185,16 @@ VITE_REPOSITORY_URL=https://你的代码仓库地址 npm run build
 - Qoder Sites React starter、Shadcn UI 和 Tailwind 来源及许可说明见 `PROVENANCE.md` 与 `vendor/`。
 - 其他依赖保留各自许可证。
 
-## 提测前仍需由参赛者补充
+## 提测信息
 
-- 公开网站地址、代码仓库地址与 Qoder 账号 UID。
-- `docs/QODER.md` 中关键开发环节的对话截图或录屏。
-- 如提交真实使用效果，附上可核对来源并隐去个人信息。
+| 材料 | 内容 |
+| --- | --- |
+| 项目网站 | https://litseek-research-p9tfgvczz96.qoder.zone （任何人都可访问） |
+| 代码仓库 | https://github.com/24-long/powercontext-2026/tree/2026-competition-ecosystem/qoder |
+| 分支 | `2026-competition-ecosystem` |
+| Qoder 账号 UID | `01a1756c-0bc2-718f-9918-8eb2c0d18a7f` |
+| 运行说明 | 本文“运行环境”“从安装到启动”“接口合同” |
+| 验证样例 | 本文“验证样例”与 `backend/scripts/smoke.py` |
+| Qoder 开发记录 | `docs/QODER.md`（含真实运行输出与缺陷修复记录） |
+
+评审前需确保代码仓库对评审开放访问权限（公开仓库或添加评审为协作者）。

@@ -392,7 +392,7 @@ export default function App() {
           </section>
           <section className="delivery-section">
             <div className="delivery-card"><span>TECH STACK</span><h3>实际技术分工</h3><ul><li><b>Qoder</b>：需求拆解、前后端编码、调试、文档与网站发布</li><li><b>seekdb</b>：笔记持久化、向量索引、RRF 排序，服务层强制全文关键词约束</li><li><b>FastAPI + React</b>：可复现服务和研究工作台</li></ul></div>
-            <div className="delivery-card dark"><span>DELIVERY</span><h3>提交材料</h3><ul><li>完整源码与 .env.example，不提交真实凭据</li><li>从安装到启动的运行说明</li><li>可执行 smoke 验证与检索 trace</li><li>Qoder 开发记录及账号 UID 由参赛者补齐</li></ul></div>
+            <div className="delivery-card dark"><span>DELIVERY</span><h3>提交材料</h3><ul><li>完整源码与 .env.example，不提交真实凭据</li><li>从安装到启动的运行说明与验证样例</li><li>Qoder 开发记录与真实 smoke 输出</li><li>Qoder 账号 UID：01a1756c-0bc2-718f-9918-8eb2c0d18a7f</li></ul></div>
           </section>
         </main>
       )}

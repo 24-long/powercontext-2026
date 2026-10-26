@@ -6,7 +6,7 @@
 - 代码仓库：https://github.com/24-long/powercontext-2026/tree/2026-competition-ecosystem/qoder
 - 分支与提交：`2026-competition-ecosystem`（提测时填写该分支最新 commit hash）
 - 项目网站：https://litseek-research-p9tfgvczz96.qoder.zone
-- Qoder 账号 UID：**请参赛者在提测前填写**
+- Qoder 账号 UID：`01a1756c-0bc2-718f-9918-8eb2c0d18a7f`
 
 ## 1. 需求拆解与方案设计
 
