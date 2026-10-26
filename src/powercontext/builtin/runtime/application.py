@@ -166,6 +166,7 @@ from powercontext.builtin.runtime._scope_cache import (
     ScopeCacheObserver,
     ScopeEvictor,
 )
+from powercontext.builtin.runtime.context_pack import ContextPack, ContextPackDelta, ContextPackError
 from powercontext.builtin.runtime.decision_model import DecisionModel
 from powercontext.builtin.runtime.errors import InvalidRuntimeRequestError, TopicMemoryProcessingUnavailableError
 from powercontext.builtin.runtime.models import (
@@ -846,6 +847,29 @@ class ScopedContextApplication:
             if authorize_scopes is not None:
                 await authorize_scopes((self.scope_id, *scope.context_references))
             return await self._prepare(request, scope)
+
+    async def prepare_incremental(
+        self,
+        request: PrepareContextRequest,
+        base_pack: ContextPack | None = None,
+    ) -> ContextPack | ContextPackDelta:
+        """Prepare the target context as a full pack, or as a delta against ``base_pack``.
+
+        Without a base the caller receives a complete :class:`ContextPack` for the
+        target prepared content. With the pack the caller already holds, the caller
+        receives a :class:`ContextPackDelta` that rebuilds the same target content
+        from that base; the receiver applies it with
+        :func:`powercontext.builtin.runtime.context_pack.apply_context_pack_delta`.
+        """
+        if base_pack is not None and not isinstance(base_pack, ContextPack):
+            raise ContextPackError("invalid-base-pack")
+        prepared = await self.prepare(request)
+        target = (
+            ContextPack.build(()) if prepared.content is None else ContextPack.from_content(prepared.content)
+        )
+        if base_pack is None:
+            return target
+        return ContextPackDelta.between(base_pack, target)
 
     async def _prepare(self, request: PrepareContextRequest, scope: ScopeDescriptor, /) -> PreparedContext:
         build, effort = await self._prepare_build(request, scope)
