@@ -90,6 +90,8 @@ PASS cards: citations=['attention-note-03', 'bert-note-01']; foreign evidence re
 
 ## 6. 对话截图或录屏清单
 
+`docs/evidence/qoder-account-uid.png` 为 Qoder 个人资料截图，其中「身份 → 账号 ID」即上文的账号 UID，用于核对站点归属与使用记录。
+
 请参赛者使用同一 Qoder 会话补充以下材料，文件名可放在本目录的 `evidence/` 下：
 
 1. 需求拆解或架构规划对话。
